@@ -73,8 +73,8 @@ def create_data_loaders(texts, labels, tokenizer, batch_size=32, val_ratio=0.2):
     val_dataset = NewsDataset(val_texts, val_labels, tokenizer)
     
     # 创建数据加载器
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
     
     return train_loader, val_loader
 

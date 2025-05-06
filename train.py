@@ -23,6 +23,7 @@ from models.base_model import (
 )
 from models.traditional_models import TraditionalModel
 from transformers import AutoTokenizer
+from utils.lstm_tokenizer import LSTMTokenizer
 
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
@@ -236,10 +237,22 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning
         os.makedirs(savedpath)
         logger.info(f"创建保存目录: {savedpath}")
     
-    # 加载tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese", local_files_only=True)
+    # 为LSTM模型创建分词器
+    lstm_tokenizer = LSTMTokenizer(vocab_size=50000, min_freq=2)
+    lstm_tokenizer.fit(texts)
+    logger.info(f"LSTM分词器词表大小: {len(lstm_tokenizer.word2idx)}")
+    
+    # 为其他模型加载BERT分词器
+    bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese", local_files_only=True)
+    logger.info(f"BERT分词器加载完成")
 
-    train_loader, val_loader = create_data_loaders(texts, labels, tokenizer, batch_size)
+    # 创建数据加载器
+    train_loader, val_loader = create_data_loaders(
+        texts, 
+        labels, 
+        tokenizer=lstm_tokenizer if 'lstm' in neural_models else bert_tokenizer,
+        batch_size=batch_size
+    )
     logger.info(f"数据加载器创建完成，训练集大小: {len(train_loader.dataset)}, 验证集大小: {len(val_loader.dataset)}")
     
     # 测试所有神经网络模型
@@ -252,32 +265,35 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning
             if model_type == 'bert':
                 model = BERTModel().to(device)
             elif model_type == 'textcnn':
-                model = TextCNN(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim).to(device)
+                model = TextCNN(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim).to(device)
             elif model_type == 'lstm':
-                model = LSTMModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
-                                 hidden_dim=hidden_dim).to(device)
+                model = LSTMModel(
+                    vocab_size=len(lstm_tokenizer.word2idx),
+                    embedding_dim=embedding_dim,
+                    hidden_dim=hidden_dim
+                ).to(device)
             elif model_type == 'gru':
-                model = GRUModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
+                model = GRUModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim, 
                                 hidden_dim=hidden_dim).to(device)
             elif model_type == 'bilstm':
-                model = BiLSTMModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
+                model = BiLSTMModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim, 
                                    hidden_dim=hidden_dim).to(device)
             elif model_type == 'bigru':
-                model = BiGRUModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
+                model = BiGRUModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim, 
                                   hidden_dim=hidden_dim).to(device)
             elif model_type == 'transformer':
                 model = TransformerModel(
-                    vocab_size=tokenizer.vocab_size, 
+                    vocab_size=len(lstm_tokenizer.word2idx), 
                     embedding_dim=256,
                     num_heads=8
                 ).to(device)
             elif model_type == 'han':
-                model = HANModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
+                model = HANModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim, 
                                 hidden_dim=hidden_dim).to(device)
             elif model_type == 'dpcnn':
-                model = DPCNNModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim).to(device)
+                model = DPCNNModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim).to(device)
             elif model_type == 'rcnn':
-                model = RCNNModel(vocab_size=tokenizer.vocab_size, embedding_dim=embedding_dim, 
+                model = RCNNModel(vocab_size=len(lstm_tokenizer.word2idx), embedding_dim=embedding_dim, 
                                  hidden_dim=hidden_dim).to(device)
             
             logger.info(f"{model_type} 模型初始化完成")

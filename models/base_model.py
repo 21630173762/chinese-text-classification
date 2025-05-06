@@ -52,19 +52,61 @@ class TextCNN(BaseModel):
         return logits
 
 class LSTMModel(BaseModel):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes=10):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes=10, num_layers=2, dropout=0.2):
         super(LSTMModel, self).__init__(num_classes)
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-        self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(hidden_dim, num_classes)
+        self.lstm = nn.LSTM(
+            embedding_dim, 
+            hidden_dim, 
+            num_layers=num_layers, 
+            batch_first=True, 
+            bidirectional=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+        
+        # 注意力层
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
+        
+        # 多层感知机
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        self.fc = nn.Linear(hidden_dim // 2, num_classes)
         
     def forward(self, input_ids, attention_mask=None):
+        # 词嵌入
         x = self.embedding(input_ids)
+        
+        # LSTM层
         lstm_out, _ = self.lstm(x)
-        lstm_out = lstm_out[:, -1, :]
-        lstm_out = self.dropout(lstm_out)
-        logits = self.fc(lstm_out)
+        
+        # 注意力机制
+        attention_weights = self.attention(lstm_out)
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(-1)
+            attention_weights = attention_weights.masked_fill(
+                attention_mask == 0, float('-inf')
+            )
+        attention_weights = F.softmax(attention_weights, dim=1)
+        
+        # 加权求和
+        context = torch.sum(attention_weights * lstm_out, dim=1)
+        
+        # 多层感知机
+        features = self.mlp(context)
+        
+        # 分类层
+        logits = self.fc(features)
         return logits
 
 class GRUModel(BaseModel):
@@ -84,19 +126,61 @@ class GRUModel(BaseModel):
         return logits
 
 class BiLSTMModel(BaseModel):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes=10):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes=10, num_layers=2, dropout=0.2):
         super(BiLSTMModel, self).__init__(num_classes)
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
-        self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(hidden_dim * 2, num_classes)
+        self.lstm = nn.LSTM(
+            embedding_dim, 
+            hidden_dim, 
+            num_layers=num_layers, 
+            batch_first=True, 
+            bidirectional=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+        
+        # 注意力层
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
+        
+        # 多层感知机
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        self.fc = nn.Linear(hidden_dim // 2, num_classes)
         
     def forward(self, input_ids, attention_mask=None):
+        # 词嵌入
         x = self.embedding(input_ids)
+        
+        # LSTM层
         lstm_out, _ = self.lstm(x)
-        lstm_out = lstm_out[:, -1, :]
-        lstm_out = self.dropout(lstm_out)
-        logits = self.fc(lstm_out)
+        
+        # 注意力机制
+        attention_weights = self.attention(lstm_out)
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(-1)
+            attention_weights = attention_weights.masked_fill(
+                attention_mask == 0, float('-inf')
+            )
+        attention_weights = F.softmax(attention_weights, dim=1)
+        
+        # 加权求和
+        context = torch.sum(attention_weights * lstm_out, dim=1)
+        
+        # 多层感知机
+        features = self.mlp(context)
+        
+        # 分类层
+        logits = self.fc(features)
         return logits
 
 class BiGRUModel(BaseModel):

@@ -47,13 +47,24 @@ class NewsDataset(Dataset):
         text = self.texts[idx]
         label = self.labels[idx]
         
-        encoding = self.tokenizer(
-            text,
-            max_length=self.max_length,
-            padding='max_length',
-            truncation=True,
-            return_tensors='pt'
-        )
+        # 检查tokenizer类型
+        if isinstance(self.tokenizer, BertTokenizer):
+            encoding = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding='max_length',
+                truncation=True,
+                return_tensors='pt'
+            )
+        else:
+            # 使用LSTMTokenizer
+            encoding = self.tokenizer(
+                text,
+                max_length=self.max_length,
+                padding=True,
+                truncation=True,
+                return_tensors='pt'
+            )
         
         return {
             'input_ids': encoding['input_ids'].squeeze(),

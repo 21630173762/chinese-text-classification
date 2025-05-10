@@ -72,6 +72,30 @@ def create_session():
     session.mount('https://', adapter)
     return session
 
+class EarlyStopping:
+    def __init__(self, patience=3, min_delta=0, mode='max'):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.best_model = None
+        
+    def __call__(self, score, model):
+        if self.best_score is None:
+            self.best_score = score
+            self.best_model = model.state_dict()
+        elif (self.mode == 'max' and score < self.best_score + self.min_delta) or \
+             (self.mode == 'min' and score > self.best_score - self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.best_model = model.state_dict()
+            self.counter = 0
+
 def train_neural_model(model, train_loader, val_loader, device, num_epochs=10, learning_rate=2e-5, savedpath=None, logger=None):
     if logger is None:
         logger = setup_logging(os.path.join(savedpath, 'logs') if savedpath else 'logs')
@@ -82,6 +106,11 @@ def train_neural_model(model, train_loader, val_loader, device, num_epochs=10, l
     # 用于存储训练过程中的损失和准确率
     train_losses = []
     train_accs = []
+    val_losses = []
+    val_accs = []
+    
+    # 初始化早停止
+    early_stopping = EarlyStopping(patience=3, mode='max')
     
     for epoch in range(num_epochs):
         model.train()
@@ -121,8 +150,41 @@ def train_neural_model(model, train_loader, val_loader, device, num_epochs=10, l
         train_losses.append(avg_train_loss)
         train_accs.append(avg_train_acc)
         
+        # 验证
+        model.eval()
+        val_loss = 0
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
+                
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                loss = criterion(outputs, labels)
+                
+                val_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                val_total += labels.size(0)
+                val_correct += (predicted == labels).sum().item()
+        
+        avg_val_loss = val_loss / len(val_loader)
+        avg_val_acc = 100 * val_correct / val_total
+        val_losses.append(avg_val_loss)
+        val_accs.append(avg_val_acc)
+        
         logger.info(f'Epoch {epoch+1}/{num_epochs} 完成:')
         logger.info(f'训练损失: {avg_train_loss:.4f}, 训练准确率: {avg_train_acc:.2f}%')
+        logger.info(f'验证损失: {avg_val_loss:.4f}, 验证准确率: {avg_val_acc:.2f}%')
+        
+        # 早停止检查
+        early_stopping(avg_val_acc, model)
+        if early_stopping.early_stop:
+            logger.info(f'Early stopping triggered at epoch {epoch+1}')
+            model.load_state_dict(early_stopping.best_model)
+            break
     
     # 绘制训练曲线
     plt.figure(figsize=(12, 5))
@@ -130,17 +192,19 @@ def train_neural_model(model, train_loader, val_loader, device, num_epochs=10, l
     # 绘制损失曲线
     plt.subplot(1, 2, 1)
     plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Val Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Training Loss')
+    plt.title('Training and Validation Loss')
     plt.legend()
     
     # 绘制准确率曲线
     plt.subplot(1, 2, 2)
     plt.plot(train_accs, label='Train Acc')
+    plt.plot(val_accs, label='Val Acc')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
-    plt.title('Training Accuracy')
+    plt.title('Training and Validation Accuracy')
     plt.legend()
     
     # 保存图像
@@ -153,7 +217,7 @@ def train_neural_model(model, train_loader, val_loader, device, num_epochs=10, l
     else:
         plt.show()
     
-    return train_accs[-1]  # 返回最后一个epoch的训练准确率
+    return val_accs[-1]  # 返回最后一个epoch的验证准确率
 
 def evaluate_neural_model(model, data_loader, device):
     model.eval()
@@ -223,7 +287,8 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=30, learning
     
     # 定义所有模型类型
     neural_models = [
-         'lstm',
+
+        'bilstm'
     ]
     
     traditional_models = [
@@ -236,7 +301,7 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=30, learning
         logger.info(f"创建保存目录: {savedpath}")
     
     # 加载tokenizers
-    bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese", local_files_only=True)
+    bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese")
     lstm_tokenizer = LSTMTokenizer(vocab_size=50000)
     lstm_tokenizer.fit(texts)  # 使用训练数据构建LSTM的词表
     
@@ -339,7 +404,7 @@ def main():
     # 设置默认参数
     data_path = "D:/c/AICode/work/data/processed/cnews.train.processed.txt"
     savedpath = "D:/c/AICode/work/models/saved"
-    batch_size = 32
+    batch_size = 16          
     num_epochs = 1
     learning_rate = 2e-5
     embedding_dim = 300

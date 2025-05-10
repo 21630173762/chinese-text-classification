@@ -42,30 +42,19 @@ class LSTMTokenizer:
     def decode(self, indices):
         return [self.idx2word.get(idx, '<UNK>') for idx in indices]
         
-    def __call__(self, texts, max_length=512, padding=True, truncation=True, return_tensors=None):
-        # 如果输入是单个文本，转换为列表
-        if isinstance(texts, str):
-            texts = [texts]
-            
-        # 编码所有文本
-        all_indices = []
-        all_attention_masks = []
+    def __call__(self, text, max_length=512, padding=True, truncation=True, return_tensors=None):
+        # 编码文本
+        indices = self.encode(text, max_length)
         
-        for text in texts:
-            # 编码文本
-            indices = self.encode(text, max_length)
-            all_indices.append(indices)
-            
-            # 创建attention mask
-            attention_mask = [1] * len(indices)
-            if padding:
-                attention_mask = attention_mask + [0] * (max_length - len(indices))
-            all_attention_masks.append(attention_mask)
+        # 创建attention mask
+        attention_mask = [1] * len(indices)
+        if padding:
+            attention_mask = attention_mask + [0] * (max_length - len(indices))
         
         # 创建返回字典
         result = {
-            'input_ids': all_indices,
-            'attention_mask': all_attention_masks
+            'input_ids': indices,
+            'attention_mask': attention_mask
         }
         
         # 如果需要返回tensor

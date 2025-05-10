@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import BertModel
+from transformers import BertForSequenceClassification
 
 class BaseModel(nn.Module):
     def __init__(self, num_classes=10):

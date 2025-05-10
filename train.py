@@ -204,13 +204,13 @@ def train_traditional_model(model, texts, labels):
     
     return val_acc
 
-def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning_rate=2e-5, 
+def test_all_models(data_path, savedpath, batch_size=32, num_epochs=30, learning_rate=2e-5, 
                    embedding_dim=300, hidden_dim=256):
     logger = setup_logging(os.path.join(savedpath, 'logs'))
     logger.info("开始测试所有模型")
     logger.info(f"数据路径: {data_path}")
     logger.info(f"保存路径: {savedpath}")
-    logger.info(f"批次大小: {batch_size}, 训练轮数: {num_epochs}, 学习率: {learning_rate}")
+    logger.info(f"批次大小: {batch_size}, 学习率: {learning_rate}")
     
     # 加载数据
     logger.info("正在加载数据...")
@@ -223,6 +223,7 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning
     
     # 定义所有模型类型
     neural_models = [
+        'bert',
         'textcnn', 'lstm', 'gru', 
         'bilstm', 'bigru', 'transformer',
         'han', 'dpcnn', 'rcnn'
@@ -247,13 +248,19 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning
     for model_type in neural_models:
         logger.info(f"\n开始测试 {model_type} 模型...")
         
-        # 根据模型类型选择tokenizer
-        if model_type in ['lstm', 'bilstm']:
+        # 根据模型类型选择tokenizer和epoch数
+        if model_type == 'bert':
+            tokenizer = bert_tokenizer
+            current_epochs = 5
+            logger.info(f"使用 BERT tokenizer 处理 {model_type} 模型的数据，训练轮数: {current_epochs}")
+        elif model_type in ['lstm', 'bilstm']:
             tokenizer = lstm_tokenizer
-            logger.info(f"使用 LSTM tokenizer 处理 {model_type} 模型的数据")
+            current_epochs = 30
+            logger.info(f"使用 LSTM tokenizer 处理 {model_type} 模型的数据，训练轮数: {current_epochs}")
         else:
             tokenizer = bert_tokenizer
-            logger.info(f"使用 BERT tokenizer 处理 {model_type} 模型的数据")
+            current_epochs = 30
+            logger.info(f"使用 BERT tokenizer 处理 {model_type} 模型的数据，训练轮数: {current_epochs}")
         
         # 创建数据加载器
         train_loader, val_loader = create_data_loaders(texts, labels, tokenizer, batch_size)
@@ -296,7 +303,7 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=10, learning
             
             # 训练模型
             logger.info(f"开始训练 {model_type} 模型...")
-            train_neural_model(model, train_loader, val_loader, device, num_epochs, learning_rate, savedpath, logger)
+            train_neural_model(model, train_loader, val_loader, device, current_epochs, learning_rate, savedpath, logger)
             
             # 评估模型
             val_acc = evaluate_neural_model(model, val_loader, device)

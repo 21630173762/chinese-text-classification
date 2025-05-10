@@ -61,7 +61,7 @@ class NewsDataset(Dataset):
             encoding = self.tokenizer(
                 text,
                 max_length=self.max_length,
-                padding=True,
+                padding='max_length',
                 truncation=True,
                 return_tensors='pt'
             )

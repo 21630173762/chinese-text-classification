@@ -61,7 +61,7 @@ class NewsDataset(Dataset):
             encoding = self.tokenizer(
                 text,
                 max_length=self.max_length,
-                padding='max_length',
+                padding=True,
                 truncation=True,
                 return_tensors='pt'
             )
@@ -72,7 +72,7 @@ class NewsDataset(Dataset):
             'label': torch.tensor(label, dtype=torch.long)
         }
 
-def create_data_loaders(texts, labels, tokenizer, batch_size=32, val_ratio=0.2):
+def create_data_loaders(texts, labels, tokenizer, batch_size=32, val_ratio=0.2, collate_fn=None):
     """创建数据加载器"""
     # 划分训练集和验证集
     train_texts, val_texts, train_labels, val_labels = train_test_split(
@@ -84,8 +84,19 @@ def create_data_loaders(texts, labels, tokenizer, batch_size=32, val_ratio=0.2):
     val_dataset = NewsDataset(val_texts, val_labels, tokenizer)
     
     # 创建数据加载器
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=batch_size, 
+        shuffle=True, 
+        num_workers=8,
+        collate_fn=collate_fn
+    )
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=batch_size, 
+        num_workers=8,
+        collate_fn=collate_fn
+    )
     
     return train_loader, val_loader
 

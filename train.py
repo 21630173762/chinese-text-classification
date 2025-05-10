@@ -223,10 +223,7 @@ def test_all_models(data_path, savedpath, batch_size=32, num_epochs=30, learning
     
     # 定义所有模型类型
     neural_models = [
-        'bert',
-        'textcnn', 'lstm', 'gru', 
-        'bilstm', 'bigru', 'transformer',
-        'han', 'dpcnn', 'rcnn'
+         'lstm',
     ]
     
     traditional_models = [

@@ -14,6 +14,7 @@ from models.base_model import (
     HANModel, DPCNNModel, RCNNModel
 )
 from models.traditional_models import TraditionalModel
+from utils.lstm_tokenizer import LSTMTokenizer
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'SimSun']
@@ -172,48 +173,62 @@ def main():
     # 加载数据
     texts, labels = load_data(data_path)
     
-    # 加载tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese")
-    data_loader = create_data_loader(texts, labels, tokenizer, batch_size=32)
+    # 加载tokenizers
+    bert_tokenizer = AutoTokenizer.from_pretrained("bert-base-chinese", local_files_only=True)
+    lstm_tokenizer = LSTMTokenizer(vocab_size=50000)
+    lstm_tokenizer.fit(texts)  # 使用训练数据构建LSTM的词表
     
     # 定义深度学习模型配置
     dl_model_configs = {
-        'textcnn': {'type': TextCNN, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300}},
-        'lstm': {'type': LSTMModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
-        'gru': {'type': GRUModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
-        'bilstm': {'type': BiLSTMModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
-        'bigru': {'type': BiGRUModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
-        'transformer': {'type': TransformerModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 256}},
-        'han': {'type': HANModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
-        'dpcnn': {'type': DPCNNModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300}},
-        'rcnn': {'type': RCNNModel, 'params': {'vocab_size': tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}}
+        'bert': {'type': BERTModel, 'params': {}},
+        'textcnn': {'type': TextCNN, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300}},
+        'gru': {'type': GRUModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
+        'bigru': {'type': BiGRUModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
+        'transformer': {'type': TransformerModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 256}},
+        'han': {'type': HANModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}},
+        'dpcnn': {'type': DPCNNModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300}},
+        'rcnn': {'type': RCNNModel, 'params': {'vocab_size': bert_tokenizer.vocab_size, 'embedding_dim': 300, 'hidden_dim': 256}}
     }
     
     # 定义传统机器学习模型配置
     traditional_models = ['naive_bayes', 'svm', 'logistic', 'random_forest']
     
-    # 测试深度学习模型
-    print("\n开始测试深度学习模型...")
-    for model_name, config in dl_model_configs.items():
+    # 测试所有神经网络模型
+    print("\n开始测试神经网络模型:")
+    for model_type in dl_model_configs.keys():
+        print(f"\n开始测试 {model_type} 模型...")
+        
+        # 根据模型类型选择tokenizer
+        if model_type in ['lstm', 'bilstm']:
+            tokenizer = lstm_tokenizer
+            print(f"使用 LSTM tokenizer 处理 {model_type} 模型的数据")
+        else:
+            tokenizer = bert_tokenizer
+            print(f"使用 BERT tokenizer 处理 {model_type} 模型的数据")
+        
+        # 创建数据加载器
+        data_loader = create_data_loader(texts, labels, tokenizer, batch_size=32)
+        print(f"数据加载器创建完成，数据集大小: {len(data_loader.dataset)}")
+        
+        # 初始化模型
         try:
-            print(f"\n正在测试 {model_name} 模型...")
-            
-            # 创建模型实例
-            model = config['type'](**config['params'])
+            model_config = dl_model_configs[model_type]
+            model = model_config['type'](**model_config['params']).to(device)
+            print(f"{model_type} 模型初始化完成")
             
             # 加载模型权重
-            model_path = os.path.join(model_dir, f'best_model_{model_name}.pt')
+            model_path = os.path.join(model_dir, f'best_model_{model_type}.pt')
             if os.path.exists(model_path):
                 model.load(model_path)
                 model.to(device)
                 
                 # 评估模型
-                evaluate_model(model, data_loader, device, class_names, model_name, save_dir)
+                evaluate_model(model, data_loader, device, class_names, model_type, save_dir)
             else:
                 print(f"模型文件 {model_path} 不存在，跳过测试")
                 
         except Exception as e:
-            print(f"测试 {model_name} 模型时出错：{str(e)}")
+            print(f"测试 {model_type} 模型时出错：{str(e)}")
             continue
     
     # 测试传统机器学习模型
